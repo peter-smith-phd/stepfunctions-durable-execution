@@ -1,0 +1,188 @@
+{
+  "QueryLanguage": "JSONata",
+  "Comment": "A description of my state machine",
+  "StartAt": "Validate Input",
+  "States": {
+    "Validate Input": {
+      "Type": "Pass",
+      "Next": "Mark Item as Pending",
+      "Assign": {
+        "transactionId": "{% $states.input.transactionId %}",
+        "customerId": "{% $states.input.customerId %}",
+        "itemId": "{% $states.input.itemId %}",
+        "cost": "{% $states.input.cost %}"
+      }
+    },
+    "Mark Item as Pending": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${INVENTORY_FUNCTION_ARN}",
+        "Payload": {
+          "transactionId": "{% $transactionId %}",
+          "itemId": "{% $itemId %}",
+          "newStatus": "PENDING",
+          "idempotencyKey": "{% $uuid() %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Was item available?"
+    },
+    "Was item available?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Out of Stock",
+          "Condition": "{% $states.input.status != 'OK' %}"
+        }
+      ],
+      "Default": "Charge Customer"
+    },
+    "Out of Stock": {
+      "Type": "Fail",
+      "Cause": "This item is no longer in stock",
+      "Error": "OutOfStock"
+    },
+    "Charge Customer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${CHARGE_FUNCTION_ARN}",
+        "Payload": {
+          "transactionId": "{% $transactionId %}",
+          "cost": "{% $cost %}",
+          "customerId": "{% $customerId %}",
+          "idempotencyKey": "{% $uuid() %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Was charge successful?"
+    },
+    "Was charge successful?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Restore Item as Available",
+          "Condition": "{% $states.input.status != 'OK' %}"
+        }
+      ],
+      "Default": "Dispatch Order"
+    },
+    "Restore Item as Available": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${INVENTORY_FUNCTION_ARN}",
+        "Payload": {
+          "transactionId": "{% $transactionId %}",
+          "itemId": "{% $itemId %}",
+          "newStatus": "AVAILABLE",
+          "idempotencyKey": "{% $uuid() %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Charge Failed"
+    },
+    "Charge Failed": {
+      "Type": "Fail",
+      "Error": "ChargeFailed",
+      "Cause": "We were not able to charge your credit card"
+    },
+    "Dispatch Order": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${ORDER_FUNCTION_ARN}",
+        "Payload": "{% $states.input %}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Mark Item as Sold"
+    },
+    "Mark Item as Sold": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "${INVENTORY_FUNCTION_ARN}",
+        "Payload": {
+          "transactionId": "{% $transactionId %}",
+          "itemId": "{% $itemId %}",
+          "newStatus": "SOLD",
+          "idempotencyKey": "{% $uuid() %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "End": true,
+      "Output": {
+        "status": "COMPLETE"
+      }
+    }
+  }
+}

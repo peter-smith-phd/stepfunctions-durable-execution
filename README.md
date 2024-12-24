@@ -1,14 +1,25 @@
-# Welcome to your CDK TypeScript project
+# Example of Developing with Step Functions, Lambda, CDK, and LocalStack
 
-This is a blank project for CDK development with TypeScript.
+This example project demonstrates how a TypeScript developer can write an AWS
+Step Functions workflow that invokes Lambda functions. It uses a combination of
+TypeScript, CDK, Workflow Studio (part of the AWS Step Functions service), and
+LocalStack for testing.
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+To deploy this example via the AWS Cloud:
 
-## Useful commands
+```
+$ npm install
+$ cdk deploy
+$ npm test
+```
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `npx cdk deploy`  deploy this stack to your default AWS account/region
-* `npx cdk diff`    compare deployed stack with current state
-* `npx cdk synth`   emits the synthesized CloudFormation template
+To deploy this via LocalStack:
+
+```
+$ npm install
+$ cdklocal bootstrap # assuming you just booted LocalStack
+$ cdklocal deploy
+$ LOCAL_STACK=1 npm test
+```
+
+
